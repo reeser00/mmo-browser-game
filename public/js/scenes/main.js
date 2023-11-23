@@ -1,6 +1,11 @@
 import * as THREE from '/js/three/three.module.js';
 import { OrbitControls } from '/js/three/OrbitControls.js';
 
+const socket = io('http://localhost:3000');
+
+//////GLOBALS//////
+let buildingMode = false;
+
 const scene = new THREE.Scene()
 const camera = new THREE.PerspectiveCamera(
   75,
@@ -27,7 +32,7 @@ class Box extends THREE.Mesh {
   }) {
     super(
       new THREE.BoxGeometry(width, height, depth),
-      new THREE.MeshStandardMaterial({ color: color })
+      new THREE.MeshStandardMaterial({ color: color, transparent: true })
     )
 
     this.width = width
@@ -99,12 +104,13 @@ cube.castShadow = true
 scene.add(cube)
 
 const ground = new Box({
-  width: 10,
-  height: 0.5,
-  depth: 10,
+  width: 20,
+  height: 1,
+  depth: 20,
   color: '#00ff00',
   position: { x: 0, y: -2, z: 0 }
 })
+ground.name = 'ground';
 ground.receiveShadow = true
 scene.add(ground)
 
@@ -115,9 +121,6 @@ light.castShadow = true
 scene.add(light)
 
 camera.position.z = 5
-
-console.log(cube.bottom)
-console.log(ground.top)
 
 const keys = {
   a: { pressed: false },
@@ -159,6 +162,98 @@ window.addEventListener('keyup', (e) => {
       break
   }
 })
+
+//Building Function
+document.getElementById('buildmode-button').addEventListener('click', (e) => {
+    if (buildingMode) {
+        buildingMode = false;
+        document.getElementById('buildmode-button').innerHTML = 'Building Mode: Off';
+
+        ground.material.opacity = 1;
+        scene.remove(grid);
+        scene.remove(highlightMesh);
+        
+    }
+    else {
+        buildingMode = true;
+        document.getElementById('buildmode-button').innerHTML = 'Building Mode: On';
+
+        ground.material.opacity = 0;
+        scene.add(grid);
+        scene.add(highlightMesh);
+    }
+});
+
+const grid = new THREE.GridHelper(ground.width, ground.width, 0xFFFFFF, 0xFFFFFF);
+grid.position.set(ground.position.x, ground.position.y + ground.height / 2, ground.position.z);
+
+const highlightMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(1, 1),
+    new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, transparent: true, opacity: 0.5})
+);
+highlightMesh.rotateX(Math.PI / 2);
+highlightMesh.position.set(0.5, ground.position.y + ground.height / 2 +0.01, 0.5);
+
+const mousePosition = new THREE.Vector2();
+const raycaster = new THREE.Raycaster();
+let intersects;
+
+window.addEventListener('mousemove', (e) => {
+    mousePosition.x = (e.clientX / window.innerWidth) * 2 - 1;
+    mousePosition.y = -(e.clientY / window.innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mousePosition, camera);
+    intersects = raycaster.intersectObjects(scene.children);
+    intersects.forEach((intersect) => {
+        if (intersect.object.name === 'ground') {
+            const highlightPosition = new THREE.Vector3().copy(intersect.point).floor().addScalar(0.5);
+            highlightMesh.position.set(highlightPosition.x, ground.position.y + ground.height / 2 +0.01, highlightPosition.z);
+
+            const objectExists = objects.find((object) => {
+                return object.position.equals(highlightMesh.position);
+            });
+
+            if (!objectExists) {
+                highlightMesh.material.color.setHex(0xFFFFFF);
+            }
+            else
+            {
+                highlightMesh.material.color.setHex(0xFF0000);
+            }
+        }
+    });
+});
+
+//example object
+const objects = [];
+
+const sphereMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(0.4, 4, 2),
+    new THREE.MeshBasicMaterial({ wireframe: true, color: 0xff0000 })
+);
+
+window.addEventListener('mousedown', (e) => {
+    if (e.button === 0 && buildingMode){
+
+        const objectExists = objects.find((object) => {
+            return object.position.equals(highlightMesh.position);
+        });
+
+        if (!objectExists) {
+            intersects.forEach((intersect) => {
+                if (intersect.object.name === 'ground') {
+                    const sphereClone = sphereMesh.clone();
+                    sphereClone.position.copy(highlightMesh.position);
+                    scene.add(sphereClone);
+                    objects.push(sphereClone);
+                    highlightMesh.material.color.setHex(0xFF0000);
+                }
+            });
+        }
+        console.log(scene.children.length);
+    }
+});
+
+
 
 
 function animate() {
