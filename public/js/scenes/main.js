@@ -6,6 +6,16 @@ const socket = io('http://localhost:3000');
 //////GLOBALS//////
 let buildingMode = false;
 
+document.getElementById('login-button').addEventListener('click', (e) => {
+    document.getElementById('login-container').style.display = 'none';
+    socket.emit('login', document.getElementById('username-input').value);
+});
+
+socket.on('loadworld', (world) => {
+    document.getElementById('ui').classList.remove('hidden');
+    console.log(world);
+});
+
 const scene = new THREE.Scene()
 const camera = new THREE.PerspectiveCamera(
   75,
@@ -163,11 +173,13 @@ window.addEventListener('keyup', (e) => {
   }
 })
 
-//Building Function
+///BUILDING MODE///
 document.getElementById('buildmode-button').addEventListener('click', (e) => {
     if (buildingMode) {
         buildingMode = false;
         document.getElementById('buildmode-button').innerHTML = 'Building Mode: Off';
+
+        window.removeEventListener('mousedown', builderMouseDownHandler);
 
         ground.material.opacity = 1;
         scene.remove(grid);
@@ -181,6 +193,7 @@ document.getElementById('buildmode-button').addEventListener('click', (e) => {
         ground.material.opacity = 0;
         scene.add(grid);
         scene.add(highlightMesh);
+        window.addEventListener('mousedown', builderMouseDownHandler);
     }
 });
 
@@ -231,7 +244,7 @@ const sphereMesh = new THREE.Mesh(
     new THREE.MeshBasicMaterial({ wireframe: true, color: 0xff0000 })
 );
 
-window.addEventListener('mousedown', (e) => {
+const builderMouseDownHandler = (e) => {
     if (e.button === 0 && buildingMode){
 
         const objectExists = objects.find((object) => {
@@ -249,10 +262,25 @@ window.addEventListener('mousedown', (e) => {
                 }
             });
         }
-        console.log(scene.children.length);
+        console.log(objects.length);
+    
+    }else if (e.button === 2 && buildingMode) {
+        intersects.forEach((intersect) => {
+            if (intersect.object.name === 'ground') {
+                const objectExists = objects.find((object) => {
+                    return object.position.equals(highlightMesh.position);
+                });
+                if (objectExists) {
+                    scene.remove(objectExists);
+                    objects.splice(objects.indexOf(objectExists), 1);
+                }
+            }
+        });
+        console.log(objects.length);
     }
-});
-
+};
+    
+///END-BUILDING MODE///
 
 
 

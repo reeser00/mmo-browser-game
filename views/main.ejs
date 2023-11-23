@@ -3,15 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="" />
+    <link rel="stylesheet" href="css/login.css">
     <link rel="stylesheet" href="css/main.css">
     <title>MMOBG</title>
     <style> body{margin:0;}</style>
   </head>
   <body>
     <div id="app"></div>
-    <div id="ui">
+    <div id="ui" class="hidden">
         <button id="buildmode-button">Building Mode: Off</button>
     </div>
+    <div class="login-container" id="login-container">
+        <form id="login-form">
+            <input type="text" name="username" id="username-input" placeholder="Username">
+            <button type="button" id="login-button">Login</button>
+        </form>
+    </div>
+    <script src="js/jquery/jquery-3.7.1.min.js"></script>
     <script type="module" src="/js/socketio/socket.io.min.js"></script>
     <script type="module" src="/js/scenes/main.js"></script>
   </body>
