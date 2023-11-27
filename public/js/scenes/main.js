@@ -1,19 +1,52 @@
 import * as THREE from '/js/three/three.module.js';
 import { OrbitControls } from '/js/three/OrbitControls.js';
+import { GLTFLoader } from '/js/three/GLTFLoader.js';
+import * as meshes from '/js/classes/meshes.js';
+
+const skeletonUrl = new URL('/models/skeleton.glb', import.meta.url);
 
 const socket = io('http://localhost:3000');
 
 //////GLOBALS//////
 let buildingMode = false;
 
+let mixer;
+const assetLoader = new GLTFLoader();
+
+
+
+assetLoader.load(skeletonUrl.href, (gltf) => {
+    const model = gltf.scene;
+    scene.add(model);
+    model.position.set(1, -1.5, 1);
+    mixer = new THREE.AnimationMixer(model);
+    const clips = gltf.animations;
+    const clip = THREE.AnimationClip.findByName(clips, 'idle');
+    const action = mixer.clipAction(clip);
+    action.play();
+
+}, undefined, (error) => {
+    console.error(error);
+});
+
 document.getElementById('login-button').addEventListener('click', (e) => {
     document.getElementById('login-container').style.display = 'none';
+    document.getElementById('ui').classList.remove('hidden');
     socket.emit('login', document.getElementById('username-input').value);
 });
 
 socket.on('loadworld', (world) => {
-    document.getElementById('ui').classList.remove('hidden');
-    console.log(world);
+    world.objectsPlaced.forEach(object => {
+      const newObject = sphereMesh.clone();
+      newObject.position.copy(object.position);
+      newObject.rotation.copy(object.rotation);
+      newObject.scale.copy(object.scale);
+      scene.add(newObject);
+      objects.push(newObject);
+      objectsPlaced.push({name: 'sphere', position: newObject.position, rotation: newObject.rotation, scale: newObject.scale});
+    });
+
+
 });
 
 const scene = new THREE.Scene()
@@ -31,78 +64,7 @@ document.body.appendChild(renderer.domElement)
 
 const controls = new OrbitControls(camera, renderer.domElement)
 
-class Box extends THREE.Mesh {
-  constructor({
-    width,
-    height,
-    depth,
-    color = '#FFFFFF',
-    velocity = { x: 0, y: 0, z: 0 },
-    position = { x: 0, y: 0, z: 0 }
-  }) {
-    super(
-      new THREE.BoxGeometry(width, height, depth),
-      new THREE.MeshStandardMaterial({ color: color, transparent: true })
-    )
-
-    this.width = width
-    this.height = height
-    this.depth = depth
-    this.gravity = 0.005;
-    this.position.set(position.x, position.y, position.z)
-
-    this.bottom = this.position.y - this.height / 2
-    this.top = this.position.y + this.height / 2
-    this.left = this.position.x - this.width / 2
-    this.right = this.position.x + this.width / 2
-    this.front = this.position.z + this.depth / 2
-    this.back = this.position.z - this.depth / 2
-
-    this.velocity = velocity
-  }
-  updateSides() {
-    this.bottom = this.position.y - this.height / 2
-    this.top = this.position.y + this.height / 2
-    this.left = this.position.x - this.width / 2
-    this.right = this.position.x + this.width / 2
-    this.front = this.position.z + this.depth / 2
-    this.back = this.position.z - this.depth / 2
-  }
-
-  update(ground) {
-    this.updateSides()
-
-    this.position.x += this.velocity.x
-    this.position.z += this.velocity.z
-
-    //detect collision
-    
-
-    this.applyGravity(ground)
-  }
-
-  applyGravity(ground) {
-    this.velocity.y -= this.gravity
-
-    //ground collision
-    if (boxCollision(this, ground)) {
-      this.velocity.y *= 0.8;
-      this.velocity.y = -this.velocity.y
-    } else {
-      this.position.y += this.velocity.y
-    }
-  }
-}
-
-function boxCollision(box1, box2) {
-  const xCollision = box1.left + box1.velocity.x <= box2.right && box1.right + box1.velocity.x >= box2.left
-  const yCollision = box1.bottom + box1.velocity.y <= box2.top && box1.top + box1.velocity.y >= box2.bottom
-  const zCollision = box1.front + box1.velocity.z >= box2.back && box1.back + + box1.velocity.z <= box2.front
-
-  return xCollision && yCollision && zCollision
-}
-
-const cube = new Box({
+const cube = new meshes.Box({
   width: 1,
   height: 1,
   depth: 1,
@@ -113,7 +75,7 @@ const cube = new Box({
 cube.castShadow = true
 scene.add(cube)
 
-const ground = new Box({
+const ground = new meshes.Box({
   width: 20,
   height: 1,
   depth: 20,
@@ -184,7 +146,8 @@ document.getElementById('buildmode-button').addEventListener('click', (e) => {
         ground.material.opacity = 1;
         scene.remove(grid);
         scene.remove(highlightMesh);
-        
+        console.log(objects);
+        socket.emit('saveworld', objectsPlaced);
     }
     else {
         buildingMode = true;
@@ -238,6 +201,7 @@ window.addEventListener('mousemove', (e) => {
 
 //example object
 const objects = [];
+const objectsPlaced = [];
 
 const sphereMesh = new THREE.Mesh(
     new THREE.SphereGeometry(0.4, 4, 2),
@@ -258,11 +222,11 @@ const builderMouseDownHandler = (e) => {
                     sphereClone.position.copy(highlightMesh.position);
                     scene.add(sphereClone);
                     objects.push(sphereClone);
+                    objectsPlaced.push({name: 'sphere', position: sphereClone.position, rotation: sphereClone.rotation, scale: sphereClone.scale});
                     highlightMesh.material.color.setHex(0xFF0000);
                 }
             });
         }
-        console.log(objects.length);
     
     }else if (e.button === 2 && buildingMode) {
         intersects.forEach((intersect) => {
@@ -270,20 +234,23 @@ const builderMouseDownHandler = (e) => {
                 const objectExists = objects.find((object) => {
                     return object.position.equals(highlightMesh.position);
                 });
+                const objectExistsPlaced = objectsPlaced.find((object) => {
+                    return object.position == objectExists.position;
+                });
                 if (objectExists) {
                     scene.remove(objectExists);
                     objects.splice(objects.indexOf(objectExists), 1);
+                    objectsPlaced.splice(objectsPlaced.indexOf(objectExistsPlaced), 1);
                 }
             }
         });
-        console.log(objects.length);
     }
 };
     
 ///END-BUILDING MODE///
 
 
-
+const clock = new THREE.Clock();
 function animate() {
   const animationId = requestAnimationFrame(animate)
 
@@ -307,7 +274,16 @@ function animate() {
   }
 
   cube.update(ground)
-  /* cube.rotation.x += 0.01
-  cube.rotation.y += 0.01 */
+  if (mixer) {
+    mixer.update(clock.getDelta());
+  }
 }
 animate()
+
+//check if user rezised window
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight
+  camera.updateProjectionMatrix()
+
+  renderer.setSize(window.innerWidth, window.innerHeight)
+});

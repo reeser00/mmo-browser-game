@@ -54,12 +54,18 @@ io.on('connection', (socket) => {
         players[socket.id] = {
             username: username
         };
+        console.log(players);
+
         loadWorld(username).then((world) => {
             socket.emit('loadworld', world);
         });
     });
 
-    
+    //save players world
+    socket.on('saveworld', (objectsPlaced) => {
+        console.log(objectsPlaced);
+        saveWorld(players[socket.id].username, objectsPlaced);
+    });
 
     //disconnect
     socket.on('disconnect', () => {
@@ -77,6 +83,10 @@ server.listen(port, () => {
 
 
 //FUNCTIONS
+async function saveWorld(username, objectsPlaced) {
+    let saveWorld = worldData.updateOne({owner: username}, {objectsPlaced: objectsPlaced});
+    return saveWorld;
+}
 
 async function loadWorld(username) {
     let world = await worldData.findOne({owner: username});
